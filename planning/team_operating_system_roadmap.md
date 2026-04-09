@@ -2,7 +2,6 @@
 
 ## Source of Truth
 This roadmap is aligned to:
-- `docs/TRP1 Challenge Week 8-9_ The Oracle Forge of Data Agent.md`
 - `planning/ai_dlc_playbook.md`
 
 Challenge window: **Weeks 8-9 (April 2026)**
