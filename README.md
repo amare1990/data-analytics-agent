@@ -78,6 +78,111 @@ python3 eval/run_dab_benchmark.py \
 python3 -m unittest discover -s tests -v
 ```
 
+## Docker setup for all 4 DB types
+Run PostgreSQL + MongoDB + MCP toolbox in Docker, and keep SQLite as a local file mounted into the toolbox container.
+
+Note: MCP Toolbox `v0.30.0` does not expose a DuckDB source type. This project executes DuckDB through the local Python `duckdb` driver (`DUCKDB_PATH`) while PostgreSQL/SQLite/MongoDB run through toolbox tools.
+
+Start services:
+```bash
+mkdir -p data/sqlite data/duckdb
+docker compose --env-file .env.example up -d
+```
+
+Verify toolbox tools:
+```bash
+curl -sS -X POST http://localhost:5000/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | python3 -m json.tool
+```
+
+If image pull fails with `error from registry: denied`, reset Docker auth and retry:
+```bash
+docker logout
+docker logout ghcr.io || true
+docker logout us-central1-docker.pkg.dev || true
+docker pull docker.io/library/postgres:16
+docker pull docker.io/library/mongo:7
+docker pull us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:0.30.0
+docker compose --env-file .env.example up -d
+```
+
+Agent runtime `.env` minimum:
+```bash
+AGENT_USE_MCP=1
+MCP_TOOLBOX_URL=http://localhost:5000
+AGENT_OFFLINE_MODE=1
+DUCKDB_PATH=./data/duckdb/main.duckdb
+```
+
+Install Python dependencies inside your virtualenv (required for DuckDB local execution):
+```bash
+.venv/bin/pip install -r requirements.txt
+```
+
+Docker files used:
+- `docker-compose.yml`
+- `mcp/tools.docker.yaml`
+
+## EC2 implementation runbook
+Validated setup pattern for the team EC2 server:
+- Run PostgreSQL + MongoDB + MCP toolbox on EC2 with Docker Compose.
+- Use DuckDB locally on EC2 through Python (`duckdb` package + `DUCKDB_PATH`).
+- No Docker Desktop is needed on EC2 (Linux server).
+
+If Docker permission is denied for non-root user:
+```bash
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+# reconnect SSH (or run: newgrp docker)
+```
+
+Start/stop/status (replace compose file if you use a custom one such as `docker-compose.mcp.yml`):
+```bash
+COMPOSE_FILE=/home/data-analytics-agent/docker-compose.yml
+
+# start
+sudo docker compose -f "$COMPOSE_FILE" up -d
+
+# status
+sudo docker compose -f "$COMPOSE_FILE" ps
+
+# stop (keep containers)
+sudo docker compose -f "$COMPOSE_FILE" stop
+
+# stop and remove containers/network
+sudo docker compose -f "$COMPOSE_FILE" down
+```
+
+Health check MCP tools:
+```bash
+curl -sS -X POST http://localhost:5000/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | python3 -m json.tool
+```
+
+Expected database model on EC2:
+- MCP toolbox tools: PostgreSQL + SQLite + MongoDB.
+- DuckDB: local Python driver (not MCP toolbox in this `v0.30.0` setup).
+
+Verify DuckDB quickly:
+```bash
+python -m pip install duckdb
+python - <<'PY'
+import duckdb, os
+p = "/home/data-analytics-agent/data/duckdb/main.duckdb"
+os.makedirs(os.path.dirname(p), exist_ok=True)
+con = duckdb.connect(p)
+print(con.execute("select 1 as ok").fetchall())
+PY
+```
+
+Team operation tip:
+- Only one teammate needs to run `up -d` when services are down.
+- Everyone else can check status with `docker compose ... ps`.
+
 ## OpenRouter mode
 By default the agent runs in offline mode for local reproducibility.
 
@@ -103,4 +208,6 @@ AGENT_CONTEXT_PATH=agent/AGENT.md
 - `signal/`: communication and community engagement logs.
 - `utils/`: reusable helpers.
 - `mcp/tools.yaml`: MCP toolbox config template for 4 DB types.
+- `mcp/tools.docker.yaml`: Docker-targeted toolbox config for 4 DB types.
+- `docker-compose.yml`: local Postgres + MongoDB + MCP toolbox stack.
 - `results/`: benchmark outputs and submission artifacts.
