@@ -114,6 +114,27 @@ If `total_valid_runs` is `0`, check these first:
 python3 -m unittest discover -s tests -v
 ```
 
+## Code execution sandbox (challenge requirement)
+The challenge requires sandboxed execution outside the LLM context. This repo includes a local sandbox service with the required contract:
+- `GET /health`
+- `POST /execute` -> `{result, trace, validation_status, error_if_any}`
+
+Start the sandbox:
+```bash
+python3 sandbox/sandbox_server.py
+```
+
+Enable agent-side sandbox routing for local SQL execution:
+```bash
+AGENT_USE_SANDBOX=1
+SANDBOX_URL=http://localhost:8080
+```
+
+Quick health check:
+```bash
+curl -sS http://localhost:8080/health | python3 -m json.tool
+```
+
 ## Docker setup for all 4 DB types
 Run PostgreSQL + MongoDB + MCP toolbox in Docker, and keep SQLite as a local file mounted into the toolbox container.
 
@@ -229,6 +250,8 @@ OPENROUTER_API_KEY=...
 OPENROUTER_MODEL=openai/gpt-4.1-mini
 AGENT_USE_MCP=1
 MCP_TOOLBOX_URL=http://localhost:5000
+AGENT_USE_SANDBOX=1
+SANDBOX_URL=http://localhost:8080
 AGENT_MEMORY_ROOT=.oracle_forge_memory
 AGENT_RUNTIME_EVENTS_PATH=.oracle_forge_memory/events.jsonl
 AGENT_CORRECTIONS_LOG_PATH=kb/corrections/corrections_log.md
@@ -243,6 +266,7 @@ AGENT_CONTEXT_PATH=agent/AGENT.md
 - `planning/`: AI-DLC playbook, team operating roadmap, inception, operations notes, and phase templates.
 - `signal/`: communication and community engagement logs.
 - `utils/`: reusable helpers.
+- `sandbox/`: local sandbox server for isolated code execution (`/execute` contract).
 - `mcp/tools.yaml`: MCP toolbox config template for 4 DB types.
 - `mcp/tools.docker.yaml`: Docker-targeted toolbox config for 4 DB types.
 - `docker-compose.yml`: local Postgres + MongoDB + MCP toolbox stack.

@@ -12,11 +12,13 @@ Team operating roadmap: `planning/team_operating_system_roadmap.md`
 - Baseline scaffolding completed.
 - Local harness and tests available.
 - Conductor + worker runtime split is implemented for planning vs execution responsibilities.
+- Local sandbox server implemented at `sandbox/sandbox_server.py` with `/execute` contract.
 
 ## What changed from initial plan
 - Added offline mode to avoid local network-related blocking.
 - Added explicit routing-aware selection before execution planning.
 - Added worker execution path and tests for routing/worker behavior.
+- Added optional sandbox routing (`AGENT_USE_SANDBOX=1`) for isolated local SQL execution.
 
 ## Next sprint priorities
 1. Integrate real DAB dataset loaders and schemas.
