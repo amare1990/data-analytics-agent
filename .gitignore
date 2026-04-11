@@ -24,4 +24,83 @@ __pycache__/
 openai-context-layering/
 test.md
 openai-layering/
+=======
+# --- Oracle Forge local-only ---
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# Python env + caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Runtime artifacts
+.oracle_forge_memory/
+*.jsonl
+
+# Local data/results (keep repo clean)
+data/
+results/
+*.duckdb
+*.db
+*.sqlite
+*.sqlite3
+
+# Local benchmark clone
+external/
+
+# Local docker override file
+docker-compose.mcp.yml
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+# --- Oracle Forge local-only ---
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# Python env + caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Runtime artifacts
+.oracle_forge_memory/
+*.jsonl
+
+# Local data/results (keep repo clean)
+data/
+results/
+*.duckdb
+*.db
+*.sqlite
+*.sqlite3
+
+# Local benchmark clone
+external/
+
+# Local docker override file
+docker-compose.mcp.yml
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
 tenai/
