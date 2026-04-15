@@ -10,7 +10,7 @@ import logging
 import re
 from typing import Optional
 
-from agent.data_agent.config import SANDBOX_MAX_PAYLOAD_CHARS
+from agent.data_agent.config import AGENT_USE_SANDBOX, SANDBOX_MAX_PAYLOAD_CHARS
 from agent.data_agent.mcp_toolbox_client import MCPClient
 from agent.data_agent.types import ToolDescriptor
 from utils.db_utils import db_type_from_kind
@@ -50,6 +50,17 @@ class ToolRegistry:
     def __init__(self, mcp_client: MCPClient) -> None:
         self._client = mcp_client
         self._tools = mcp_client.discover_tools()
+        if AGENT_USE_SANDBOX:
+            # Optional execution path for Python code blocks (FR-10).
+            self._tools.append(
+                ToolDescriptor(
+                    name="execute_python",
+                    kind="sandbox-python",
+                    source="sandbox",
+                    description="Execute Python code in the isolated sandbox server.",
+                    parameters={"code": "string"},
+                )
+            )
         self._by_name: dict[str, ToolDescriptor] = {t.name: t for t in self._tools}
         self._by_db_type: dict[str, ToolDescriptor] = {}
         for t in self._tools:

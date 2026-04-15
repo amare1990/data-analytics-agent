@@ -90,6 +90,25 @@ All 4 databases are accessed through the unified MCPClient interface:
 
 The DuckDB tool connects to a dedicated bridge server. All tools are read-only.
 
+## Tool Scoping and Connection Declarations
+
+### Why These Tools Are Scoped This Way
+- `query_postgresql`, `query_mongodb`, and `query_sqlite` route through Google MCP Toolbox for a single operational control plane.
+- `query_duckdb` routes to the DuckDB bridge because DuckDB is not exposed by the toolbox in this deployment.
+- Tool names are flat and explicit so new team members can map a db hint directly to one query tool.
+
+### Connection Declaration Source of Truth
+- Connection declarations live in `tools.yaml` (and mirrored in `agent/tools.yaml` for agent-directory completeness).
+- `sources` declares connection endpoints/paths for all four DB types.
+- `tools` binds user-facing query tools to those declared sources.
+- Secrets and host values are environment-driven (`.env`) so no credentials are hardcoded.
+
+### Onboarding Checklist for New Team Members
+1. Open `tools.yaml` and confirm all four `sources` entries exist.
+2. Open `tools.yaml` and confirm all four `tools` entries exist.
+3. Check `.env` contains matching variables for source connection strings.
+4. Run one CLI query with explicit `--db-hints` to verify tool routing.
+
 ---
 
 ## CRITICAL: Response Format for Tool Calls

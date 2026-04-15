@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import re
 
 import duckdb
 from flask import Flask, jsonify, request
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 SQLITE_PATH: str = os.environ.get("SQLITE_PATH", "")
 DUCKDB_PATH: str = os.environ.get("DUCKDB_PATH", "")
 PORT: int = int(os.environ.get("LOCAL_DB_SERVER_PORT", "5000"))
+_MUTATION_RE = re.compile(r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE)\b", re.IGNORECASE)
 
 app = Flask(__name__)
 
@@ -67,7 +69,19 @@ def _run_sqlite(sql: str) -> dict:
 def _run_duckdb(sql: str) -> dict:
     """Execute a read-only SQL query against DUCKDB_PATH."""
     if not DUCKDB_PATH:
-        return {"success": False, "error": "DUCKDB_PATH not configured", "result": None}
+        return {
+            "success": False,
+            "error": f"duckdb_path_not_found: {DUCKDB_PATH}",
+            "result": None,
+            "error_type": "config",
+        }
+    if _MUTATION_RE.search(sql):
+        return {
+            "success": False,
+            "result": None,
+            "error": "read_only_violation: only SELECT is permitted",
+            "error_type": "policy",
+        }
     try:
         con = duckdb.connect(DUCKDB_PATH, read_only=True)
         cur = con.execute(sql)
@@ -78,13 +92,13 @@ def _run_duckdb(sql: str) -> dict:
         return {"success": True, "result": rows, "error": ""}
     except duckdb.CatalogException as exc:
         logger.warning("DuckDB catalog error: %s", exc)
-        return {"success": False, "result": None, "error": str(exc), "error_type": "query"}
+        return {"success": False, "result": None, "error": f"query_error: {exc}", "error_type": "query"}
     except duckdb.ParserException as exc:
         logger.warning("DuckDB parse error: %s", exc)
-        return {"success": False, "result": None, "error": str(exc), "error_type": "query"}
+        return {"success": False, "result": None, "error": f"query_error: {exc}", "error_type": "query"}
     except Exception as exc:
         logger.error("DuckDB unexpected error: %s", exc)
-        return {"success": False, "result": None, "error": "database error", "error_type": "query"}
+        return {"success": False, "result": None, "error": f"query_error: {exc}", "error_type": "query"}
 
 
 # ---------------------------------------------------------------------------
@@ -122,8 +136,15 @@ def list_tools():
             "name": "query_duckdb",
             "kind": "duckdb_bridge_sql",
             "description": "Execute read-only SQL against DuckDB",
+            "parameters": {"sql": "string"},
+            "schema_summary": "DuckDB database configured via DUCKDB_PATH.",
         }
     ])
+
+
+@app.route("/list_tools", methods=["GET"])
+def list_tools_mcp_alias():
+    return list_tools()
 
 
 # ---------------------------------------------------------------------------

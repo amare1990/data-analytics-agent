@@ -30,6 +30,7 @@ from agent.data_agent.config import (
     AGENT_SESSION_ID,
     AGENT_TEMPERATURE,
     AGENT_TIMEOUT_SECONDS,
+    AGENT_USE_SANDBOX,
     OFFLINE_LLM_RESPONSE,
     OPENROUTER_APP_NAME,
     OPENROUTER_API_KEY,
@@ -40,10 +41,12 @@ from agent.data_agent.context_layering import assemble_prompt, build_context_pac
 from agent.data_agent.failure_diagnostics import classify
 from agent.data_agent.knowledge_base import load_layered_kb_context
 from agent.data_agent.mcp_toolbox_client import MCPClient
+from agent.data_agent.sandbox_client import SandboxClient
 from agent.data_agent.types import (
     AgentResult,
     CorrectionEntry,
     ContextPacket,
+    InvokeResult,
     TraceEvent,
 )
 from agent.runtime.events import emit_event
@@ -74,6 +77,7 @@ class OracleForgeConductor:
         self._registry = ToolRegistry(self._mcp)
         self._policy = ToolPolicy()
         self._memory = MemoryManager(session_id=self._session_id)
+        self._sandbox = SandboxClient() if AGENT_USE_SANDBOX else None
 
         # Runtime state
         self._tool_calls: list[dict] = []
@@ -148,6 +152,10 @@ class OracleForgeConductor:
 
         # --- Context assembly ---
         agent_md = self._load_agent_md()
+        self._emit(
+            "agent_context_loaded",
+            outcome="success" if bool(agent_md) else "missing",
+        )
         kb_results = load_layered_kb_context(question)
         kb_text = "\n\n".join(content for content, _score in kb_results[:5])
         memory_ctx = self._memory.get_memory_context()
@@ -231,10 +239,10 @@ class OracleForgeConductor:
 
             # Invoke tool
             self._emit("tool_call", tool_name=tool_name, input_summary=sanitize_sql_for_log(params.get("sql", "")))
-            result = self._mcp.invoke_tool(tool_name, params)
+            result = self._invoke_runtime_tool(tool_name, params)
             self._tool_calls.append({"tool_name": tool_name, "params": params, "success": result.success})
 
-            backend = "duckdb_bridge" if result.db_type == "duckdb" else "mcp_toolbox"
+            backend = self._backend_from_result(result)
             self._emit(
                 "tool_result",
                 tool_name=tool_name,
@@ -575,10 +583,10 @@ class OracleForgeConductor:
             return None
 
         self._emit("tool_call", tool_name=tool_name, input_summary=sanitize_sql_for_log(sql))
-        result = self._mcp.invoke_tool(tool_name, {"sql": sql})
+        result = self._invoke_runtime_tool(tool_name, {"sql": sql})
         self._tool_calls.append({"tool_name": tool_name, "params": {"sql": sql}, "success": result.success})
 
-        backend = "duckdb_bridge" if result.db_type == "duckdb" else "mcp_toolbox"
+        backend = self._backend_from_result(result)
         self._emit(
             "tool_result",
             tool_name=tool_name,
@@ -754,10 +762,10 @@ class OracleForgeConductor:
                 error = f"Policy blocked corrected call: {reason}"
                 continue
 
-            result = self._mcp.invoke_tool(new_tool, new_params)
+            result = self._invoke_runtime_tool(new_tool, new_params)
             self._tool_calls.append({"tool_name": new_tool, "params": new_params, "success": result.success, "retry": retry})
 
-            backend = "duckdb_bridge" if result.db_type == "duckdb" else "mcp_toolbox"
+            backend = self._backend_from_result(result)
             self._emit(
                 "tool_result",
                 tool_name=new_tool,
@@ -774,6 +782,60 @@ class OracleForgeConductor:
             context = {"error_type": result.error_type, "db_type": result.db_type}
 
         return None
+
+    # ------------------------------------------------------------------
+    # Tool invocation dispatch
+    # ------------------------------------------------------------------
+
+    def _invoke_runtime_tool(self, tool_name: str, params: dict) -> InvokeResult:
+        """Invoke either MCP or sandbox tool based on tool identity.
+
+        Sandbox execution is activated only when AGENT_USE_SANDBOX=1 and the
+        virtual ``execute_python`` tool is selected.
+        """
+        if tool_name == "execute_python":
+            return self._invoke_sandbox(params)
+        return self._mcp.invoke_tool(tool_name, params)
+
+    def _invoke_sandbox(self, params: dict) -> InvokeResult:
+        """Execute Python code via SandboxClient and normalize result."""
+        if self._sandbox is None:
+            return InvokeResult(
+                success=False,
+                tool_name="execute_python",
+                error="sandbox_disabled",
+                error_type="config",
+                db_type="sandbox",
+            )
+
+        code = params.get("code", "")
+        if not isinstance(code, str) or not code.strip():
+            return InvokeResult(
+                success=False,
+                tool_name="execute_python",
+                error="invalid_code_payload",
+                error_type="policy",
+                db_type="sandbox",
+            )
+
+        payload = self._sandbox.execute(code)
+        ok = bool(payload.get("success", False))
+        return InvokeResult(
+            success=ok,
+            tool_name="execute_python",
+            result=payload.get("output", ""),
+            error=str(payload.get("error", "")),
+            error_type="" if ok else "query",
+            db_type="sandbox",
+        )
+
+    @staticmethod
+    def _backend_from_result(result: InvokeResult) -> str:
+        if result.db_type == "duckdb":
+            return "duckdb_bridge"
+        if result.db_type == "sandbox":
+            return "sandbox"
+        return "mcp_toolbox"
 
     # ------------------------------------------------------------------
     # LLM interaction

@@ -18,19 +18,19 @@ type: mongodb
 uri: ${MONGODB_URL}
 ---
 kind: tools
-name: postgres_query
+name: query_postgresql
 type: postgres-execute-sql
 source: postgres_main
 description: Execute SQL against PostgreSQL.
 ---
 kind: tools
-name: sqlite_query
+name: query_sqlite
 type: sqlite-execute-sql
 source: sqlite_main
 description: Execute SQL against SQLite.
 ---
 kind: tools
-name: mongo_aggregate
+name: query_mongodb
 type: mongodb-aggregate
 source: mongo_main
 description: Execute aggregation pipeline against MongoDB.

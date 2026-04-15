@@ -45,7 +45,7 @@ htmlcov/
 # Runtime artifacts
 .oracle_forge_memory/
 *.jsonl
-
+command.md/
 # Local data/results (keep repo clean)
 data/
 results/
@@ -53,7 +53,8 @@ results/
 *.db
 *.sqlite
 *.sqlite3
-
+planning/
+signal/
 # Local benchmark clone
 external/
 
